@@ -3,17 +3,16 @@
 #import "TPCacheStore.h"
 @implementation TPTranslationService
 + (void)translate:(NSString *)text completion:(TPTranslationCompletion)done {
-+  [self translate:text target:TPSettings.shared.targetLanguage completion:done];
-+}
+  [self translate:text target:TPSettings.shared.targetLanguage completion:done];
+}
 + (NSString *)automaticTargetForText:(NSString *)text {
-+  NSUInteger han=0, letters=0;
-+  for(NSUInteger i=0;i<text.length;i++){ unichar c=[text characterAtIndex:i]; if(c>=0x4E00&&c<=0x9FFF)han++; else if([[NSCharacterSet letterCharacterSet] characterIsMember:c])letters++; }
-+  return han>MAX((NSUInteger)1,letters/3) ? @"English" : @"Simplified Chinese";
-+}
+  NSUInteger han=0, letters=0;
+  for(NSUInteger i=0;i<text.length;i++){ unichar c=[text characterAtIndex:i]; if(c>=0x4E00&&c<=0x9FFF)han++; else if([[NSCharacterSet letterCharacterSet] characterIsMember:c])letters++; }
+  return han>MAX((NSUInteger)1,letters/3) ? @"English" : @"Simplified Chinese";
+}
 + (void)translate:(NSString *)text target:(NSString *)target completion:(TPTranslationCompletion)done {
-   TPSettings *s=TPSettings.shared; NSString *key=s.apiKey;
-+  NSString *cached=[TPCacheStore.shared translationForText:text target:target]; if(cached){dispatch_async(dispatch_get_main_queue(),^{done(cached,nil);});return;}
   TPSettings *s=TPSettings.shared; NSString *key=s.apiKey;
+  NSString *cached=[TPCacheStore.shared translationForText:text target:target]; if(cached){dispatch_async(dispatch_get_main_queue(),^{done(cached,nil);});return;}
   if(!text.length || !key.length){ dispatch_async(dispatch_get_main_queue(), ^{ done(nil,[NSError errorWithDomain:@"TranslatePlugin" code:1 userInfo:@{NSLocalizedDescriptionKey:@"请先配置 API Key"}]); }); return; }
   NSString *url=[s.baseURL stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"/"]];
   NSMutableURLRequest *r=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:[url stringByAppendingString:@"/chat/completions"]] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:30];
