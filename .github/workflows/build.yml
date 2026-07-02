@@ -1,0 +1,23 @@
+name: Build iOS dylib
+on: [workflow_dispatch, push]
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
+          brew install make ldid
+      - name: Build
+        run: |
+          export THEOS="$HOME/theos"
+          export PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH"
+          make clean package FINALPACKAGE=1
+          mkdir -p artifacts
+          find .theos -name 'TranslatePlugin.dylib' -exec cp {} artifacts/TranslatePlugin.dylib \;
+          cp packages/*.deb artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TranslatePlugin-V1
+          path: artifacts/*
