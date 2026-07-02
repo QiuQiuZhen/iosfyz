@@ -30,7 +30,7 @@ static const void *TPPendingKey=&TPPendingKey;
   NSString *lower=text.lowercaseString;
   NSArray *uiWords=@[@"typing…",@"online",@"last seen",@"delivered",@"read",@"yesterday",@"today"];
   for(NSString *word in uiWords)if([lower isEqualToString:word])return NO;
-  NSRegularExpression *time=[NSRegularExpression regularExpressionWithPattern:@"^\\d{1,2}[:/.\\-]\d{1,2}([ :/.\\-]\\d{1,4})?(\\s*[ap]m)?$" options:NSRegularExpressionCaseInsensitive error:nil];
+  NSRegularExpression *time=[NSRegularExpression regularExpressionWithPattern:@"^\\d{1,2}[:/.\\-]\\d{1,2}([ :/.\\-]\\d{1,4})?(\\s*[ap]m)?$" options:NSRegularExpressionCaseInsensitive error:nil];
   if([time firstMatchInString:text options:0 range:NSMakeRange(0,text.length)])return NO;
   if(digits>0 && letters==0)return NO;
   return YES;
