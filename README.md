@@ -1,6 +1,6 @@
-# TranslatePlugin V1
+# TranslatePlugin V2
 
-保守型 WhatsApp UI 增强 dylib：输入框旁“译”按钮、长按可见文本翻译/复制、OpenAI-compatible API 设置。翻译仅回填，绝不自动发送。
+保守型 WhatsApp UI 增强 dylib：输入框旁“译”按钮、长按翻译/复制、可见消息自动翻译、气泡下方译文、自动语言方向、双层翻译缓存和 OpenAI-compatible API 设置。翻译仅回填，绝不自动发送。
 
 ## 构建
 

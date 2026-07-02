@@ -5,7 +5,7 @@ INSTALL_TARGET_PROCESSES = WhatsApp
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = TranslatePlugin
-TranslatePlugin_FILES = Sources/TPPlugin.m Sources/TPSettings.m Sources/TPTranslationService.m Sources/TPUIInjector.m
+TranslatePlugin_FILES = Sources/TPPlugin.m Sources/TPSettings.m Sources/TPCacheStore.m Sources/TPTranslationService.m Sources/TPMessageScanner.m Sources/TPUIInjector.m
 TranslatePlugin_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 TranslatePlugin_FRAMEWORKS = UIKit Foundation Security
 

@@ -19,5 +19,5 @@ jobs:
           cp packages/*.deb artifacts/
       - uses: actions/upload-artifact@v4
         with:
-          name: TranslatePlugin-V1
+          name: TranslatePlugin-V2
           path: artifacts/*
