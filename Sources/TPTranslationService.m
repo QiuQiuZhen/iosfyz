@@ -6,9 +6,7 @@
   [self translate:text target:TPSettings.shared.targetLanguage completion:done];
 }
 + (NSString *)automaticTargetForText:(NSString *)text {
-  NSUInteger han=0, letters=0;
-  for(NSUInteger i=0;i<text.length;i++){ unichar c=[text characterAtIndex:i]; if(c>=0x4E00&&c<=0x9FFF)han++; else if([[NSCharacterSet letterCharacterSet] characterIsMember:c])letters++; }
-  return han>MAX((NSUInteger)1,letters/3) ? @"English" : @"Simplified Chinese";
+  return @"Simplified Chinese";
 }
 + (void)translate:(NSString *)text target:(NSString *)target completion:(TPTranslationCompletion)done {
   TPSettings *s=TPSettings.shared; NSString *key=s.apiKey;
