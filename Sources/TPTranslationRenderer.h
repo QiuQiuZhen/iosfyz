@@ -7,5 +7,4 @@ typedef NS_ENUM(NSInteger,TPBubbleState){TPBubbleStateUnprocessed,TPBubbleStateT
 +(void)setTranslation:(NSString*)translation forMessage:(TPExtractedMessage*)message;
 +(void)setFailure:(NSError*)error forMessage:(TPExtractedMessage*)message retry:(dispatch_block_t)retry;
 +(void)resetCell:(UIView*)cell;
-+(void)adjustVisibleSpacingInTableView:(UITableView*)table;
 @end
