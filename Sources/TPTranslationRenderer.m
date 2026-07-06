@@ -4,7 +4,7 @@
 #import "TPDebugLogger.h"
 #import <objc/runtime.h>
 
-static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceViewKey=&TPSourceViewKey,*TPFallbackLabelKey=&TPFallbackLabelKey,*TPAdjustedFramesKey=&TPAdjustedFramesKey,*TPSpacingAppliedKey=&TPSpacingAppliedKey,*TPOriginalTextKey=&TPOriginalTextKey,*TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey,*TPOriginalLinesKey=&TPOriginalLinesKey,*TPOriginalEditableKey=&TPOriginalEditableKey,*TPOriginalSelectableKey=&TPOriginalSelectableKey;
+static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceViewKey=&TPSourceViewKey,*TPFallbackLabelKey=&TPFallbackLabelKey,*TPAdjustedFramesKey=&TPAdjustedFramesKey,*TPExtraHeightKey=&TPExtraHeightKey,*TPSpacingAppliedKey=&TPSpacingAppliedKey,*TPOriginalTextKey=&TPOriginalTextKey,*TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey,*TPOriginalLinesKey=&TPOriginalLinesKey,*TPOriginalEditableKey=&TPOriginalEditableKey,*TPOriginalSelectableKey=&TPOriginalSelectableKey;
 
 @implementation TPTranslationRenderer
 
@@ -174,6 +174,28 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   CGSize size=table.contentSize; size.height+=extra; table.contentSize=size;
   objc_setAssociatedObject(cell,TPSpacingAppliedKey,@YES,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
++ (void)reapplyExpandedBubbleForCell:(UIView *)cell extra:(CGFloat)extra {
+  NSArray *frames=objc_getAssociatedObject(cell,TPAdjustedFramesKey); if(!frames.count||extra<=0)return;
+  for(NSDictionary *entry in frames){
+    UIView *v=[entry[@"view"] nonretainedObjectValue]; NSValue *frame=entry[@"frame"]; if(!v||!frame)continue;
+    CGRect f=frame.CGRectValue; NSString *name=NSStringFromClass(v.class);
+    if(v==cell||[name containsString:@"ContentView"]||[name containsString:@"WAMessageContainerView"]||[name containsString:@"WDSBubbleView"])f.size.height+=extra;
+    if([name containsString:@"WAMessageStatusSliceView"])f.origin.y+=extra;
+    v.frame=f; v.clipsToBounds=NO;
+  }
+}
++ (void)adjustVisibleSpacingInTableView:(UITableView *)table {
+  if(!table.window)return;
+  NSArray *cells=[table.visibleCells sortedArrayUsingComparator:^NSComparisonResult(UITableViewCell *a,UITableViewCell *b){CGFloat ay=CGRectGetMinY(a.frame),by=CGRectGetMinY(b.frame);return ay<by?NSOrderedAscending:(ay>by?NSOrderedDescending:NSOrderedSame);}];
+  CGFloat offset=0,totalExtra=0;
+  for(UITableViewCell *cell in cells){
+    CGFloat extra=[objc_getAssociatedObject(cell,TPExtraHeightKey) doubleValue];
+    if(extra>0)[self reapplyExpandedBubbleForCell:cell extra:extra];
+    CGRect f=cell.frame; f.origin.y+=offset; cell.frame=f;
+    if(extra>0){offset+=extra;totalExtra+=extra;}
+  }
+  if(totalExtra>0){CGSize s=table.contentSize; s.height+=totalExtra; table.contentSize=s;}
+}
 + (void)refreshViewsOnlyAroundCell:(UIView *)cell {
   for(UIView *v=cell;v;v=v.superview){[v setNeedsDisplay];[v setNeedsLayout];}
 }
@@ -213,6 +235,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
       CGRect f=v.frame; f.size.height+=extra; v.frame=f; v.clipsToBounds=NO;
     }
     if(status){CGRect sf=status.frame; sf.origin.y+=extra; status.frame=sf;}
+    objc_setAssociatedObject(message.cell,TPExtraHeightKey,@(extra),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [self pushVisibleCellsBelowCell:message.cell extra:extra];
   }
   label.frame=CGRectIntegral(CGRectMake(CGRectGetMinX(r)+10,CGRectGetMaxY(r)+2,width,height));
@@ -260,6 +283,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   [fallback removeFromSuperview];
   objc_setAssociatedObject(cell,TPFallbackLabelKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   objc_setAssociatedObject(cell,TPSpacingAppliedKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  objc_setAssociatedObject(cell,TPExtraHeightKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   NSArray *frames=objc_getAssociatedObject(cell,TPAdjustedFramesKey);
   for(NSDictionary *entry in frames){UIView *v=[entry[@"view"] nonretainedObjectValue];NSValue *frame=entry[@"frame"];if(v&&frame)v.frame=frame.CGRectValue;}
   objc_setAssociatedObject(cell,TPAdjustedFramesKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
