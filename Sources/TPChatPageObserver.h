@@ -3,6 +3,7 @@
 +(instancetype)shared;
 -(BOOL)observeController:(UIViewController*)controller;
 -(void)rescan;
+-(void)stopObserving;
 @property(nonatomic,readonly)BOOL inChatPage;
 @property(nonatomic,readonly,copy)NSString*currentChatId;
 @end

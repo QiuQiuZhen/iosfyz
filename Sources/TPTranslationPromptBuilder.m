@@ -1,7 +1,24 @@
 #import "TPTranslationPromptBuilder.h"
 #import "TPSettings.h"
 #import "TPTermbaseManager.h"
+
 @implementation TPTranslationPromptBuilder
-+(NSString*)systemPrompt{return [self systemPromptForTarget:@"zh-CN"];}
-+(NSString*)systemPromptForTarget:(NSString*)target{NSString*style=TPSettings.shared.translationStyle;NSString*terms=TPSettings.shared.enableTermbase?TPTermbaseManager.shared.promptContext:@"";BOOL chinese=[target.lowercaseString containsString:@"zh"]||[target containsString:@"中文"];NSString*instruction=chinese?@"把外语消息翻译成自然、准确、适合客服阅读的简体中文":@"Translate the Chinese message into natural, accurate business English suitable for WhatsApp customer communication";return [NSString stringWithFormat:@"你是一个 WhatsApp 聊天翻译器。%@。只输出译文，不解释，不输出 Markdown、代码块或原文；不添加、删减或总结；保留产品型号、品牌、金额、数量、邮箱、网址、订单号和换行。翻译风格：%@。必须尽量遵守以下术语：\n%@",instruction,style,terms];}
+
++(NSString*)systemPrompt{
+    return [self systemPromptForTarget:@"zh-CN"];
+}
+
++(NSString*)systemPromptForTarget:(NSString*)target{
+    NSString *style=TPSettings.shared.translationStyle?:@"natural";
+    NSString *terms=TPSettings.shared.enableTermbase?TPTermbaseManager.shared.promptContext:@"";
+    BOOL chinese=[target.lowercaseString containsString:@"zh"]||[target containsString:@"中文"];
+    NSString *instruction=chinese?
+    @"你是 WhatsApp 聊天消息翻译器。请把用户消息翻译成自然、简洁、口语化的中文。只输出中文译文，不要解释，不要添加前缀，不要添加引号，不要保留原文。遇到链接、代码、用户名、品牌名、型号、金额、尺码、表情符号时保持原样。":
+    @"You are a WhatsApp chat message translator. Translate the user message into natural, concise English. Output only the translation, without explanations, prefixes, quotes, Markdown, or the original text. Keep links, code, usernames, brand names, model numbers, amounts, sizes, and emoji unchanged.";
+    if(terms.length){
+        return [NSString stringWithFormat:@"%@ Translation style: %@. Follow this glossary when applicable:\n%@",instruction,style,terms];
+    }
+    return [NSString stringWithFormat:@"%@ Translation style: %@.",instruction,style];
+}
+
 @end
