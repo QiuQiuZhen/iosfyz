@@ -25,10 +25,18 @@
 
 -(BOOL)isTransientSystemController:(UIViewController*)vc{
     NSString *name=NSStringFromClass(vc.class)?:@"";
+    if([name hasPrefix:@"UI"]||[name hasPrefix:@"_UI"])return YES;
     NSArray *prefixes=@[@"UIKeyboard",@"UISystemKeyboard",@"UIInput",@"UITrackingElement",@"UITextEffects",@"UIPrediction",@"UICompatibilityInput"];
     for(NSString *prefix in prefixes)if([name hasPrefix:prefix])return YES;
     NSString *lower=name.lowercaseString;
-    return [lower containsString:@"keyboard"]||[lower containsString:@"inputwindow"]||[lower containsString:@"trackingelement"];
+    return [lower containsString:@"keyboard"]||[lower containsString:@"inputwindow"]||[lower containsString:@"trackingelement"]||[lower containsString:@"cursor"]||[lower containsString:@"candidate"]||[lower containsString:@"remoteinput"]||[lower containsString:@"inputassistant"];
+}
+
+-(BOOL)shouldKeepChatForNonChatController:(UIViewController*)vc{
+    UIViewController *top=vc.navigationController.topViewController;
+    NSString *topName=top?NSStringFromClass(top.class):@"";
+    if(top&&top!=vc&&[topName containsString:@"WAChatViewController"])return YES;
+    return NO;
 }
 
 -(void)controllerDidAppear:(UIViewController*)vc{
@@ -52,6 +60,11 @@
         }
         if([TPChatPageObserver.shared observeController:vc]){
             [TPDebugLogger.shared log:[NSString stringWithFormat:@"controller handled as chat %@",name]];
+            return;
+        }
+        if(TPChatPageObserver.shared.inChatPage&&[self shouldKeepChatForNonChatController:vc]){
+            [TPDebugLogger.shared log:[NSString stringWithFormat:@"controller ignored non-chat overlay %@ because navTopIsChat",name]];
+            [TPChatPageObserver.shared rescan];
             return;
         }
         [TPChatPageObserver.shared stopObserving];
