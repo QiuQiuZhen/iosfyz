@@ -15,6 +15,7 @@ static const void *TPFallbackSourceKey=&TPFallbackSourceKey;
 static const void *TPReservedHeightKey=&TPReservedHeightKey;
 static const void *TPBaseTransformKey=&TPBaseTransformKey;
 static const void *TPAppliedShiftKey=&TPAppliedShiftKey;
+static const void *TPTableAppliedExtraKey=&TPTableAppliedExtraKey;
 static const void *TPOriginalTextKey=&TPOriginalTextKey;
 static const void *TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey;
 static const void *TPOriginalLinesKey=&TPOriginalLinesKey;
@@ -484,35 +485,54 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
 }
 
 +(void)refreshVisibleSpacingInTable:(UITableView*)table{
-    NSArray *cells=[[table visibleCells] sortedArrayUsingComparator:^NSComparisonResult(id obj1,id obj2){
-        UIView *a=obj1;
-        UIView *b=obj2;
-        CGFloat ay=CGRectGetMinY(a.frame),by=CGRectGetMinY(b.frame);
+    NSMutableArray *items=[NSMutableArray array];
+    for(UIView *cell in [table visibleCells]){
+        CGFloat oldShift=[objc_getAssociatedObject(cell,TPAppliedShiftKey) doubleValue];
+        CGRect baseFrame=cell.frame;
+        baseFrame.origin.y-=oldShift;
+        [items addObject:@{@"cell":cell,@"baseFrame":[NSValue valueWithCGRect:baseFrame],@"baseY":@(CGRectGetMinY(baseFrame))}];
+    }
+    NSArray *sorted=[items sortedArrayUsingComparator:^NSComparisonResult(id obj1,id obj2){
+        NSDictionary *a=obj1;
+        NSDictionary *b=obj2;
+        CGFloat ay=[a[@"baseY"] doubleValue],by=[b[@"baseY"] doubleValue];
         if(ay<by)return NSOrderedAscending;
         if(ay>by)return NSOrderedDescending;
         return NSOrderedSame;
     }];
+    CGFloat oldTableExtra=[objc_getAssociatedObject(table,TPTableAppliedExtraKey) doubleValue];
+    CGSize currentSize=table.contentSize;
+    CGFloat baseContentHeight=MAX(0.0,currentSize.height-oldTableExtra);
+    CGFloat bottomInset=0.0;
+    if(@available(iOS 11,*))bottomInset=table.adjustedContentInset.bottom;else bottomInset=table.contentInset.bottom;
+    BOOL nearBottom=table.contentOffset.y+CGRectGetHeight(table.bounds)>=currentSize.height+bottomInset-96.0;
     CGFloat cumulative=0.0;
     NSInteger shifted=0;
-    for(UIView *cell in cells){
-        NSValue *baseValue=objc_getAssociatedObject(cell,TPBaseTransformKey);
-        NSNumber *appliedValue=objc_getAssociatedObject(cell,TPAppliedShiftKey);
-        if(!baseValue||!appliedValue){
-            objc_setAssociatedObject(cell,TPBaseTransformKey,[NSValue valueWithCGAffineTransform:cell.transform],OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            baseValue=objc_getAssociatedObject(cell,TPBaseTransformKey);
-        }
-        CGAffineTransform base=baseValue?[baseValue CGAffineTransformValue]:CGAffineTransformIdentity;
+    for(NSDictionary *entry in sorted){
+        UIView *cell=entry[@"cell"];
+        CGRect frame=[entry[@"baseFrame"] CGRectValue];
         CGFloat applied=cumulative;
-        cell.transform=CGAffineTransformTranslate(base,0,applied);
+        cell.transform=CGAffineTransformIdentity;
+        frame.origin.y+=applied;
+        cell.frame=frame;
         objc_setAssociatedObject(cell,TPAppliedShiftKey,@(applied),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         if(applied>0.5)shifted++;
         cumulative+=[self reservedHeightForCell:cell];
     }
-    for(UIView *cell in cells){
+    CGSize newSize=currentSize;
+    newSize.height=MAX(baseContentHeight+cumulative,baseContentHeight);
+    if(fabs(newSize.height-currentSize.height)>0.5)table.contentSize=newSize;
+    objc_setAssociatedObject(table,TPTableAppliedExtraKey,@(cumulative),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if(nearBottom&&newSize.height>CGRectGetHeight(table.bounds)){
+        CGFloat targetY=MAX(-table.contentInset.top,newSize.height-CGRectGetHeight(table.bounds)+bottomInset);
+        if(fabs(table.contentOffset.y-targetY)>1.0)[table setContentOffset:CGPointMake(table.contentOffset.x,targetY) animated:NO];
+    }
+    for(NSDictionary *entry in sorted){
+        UIView *cell=entry[@"cell"];
         UILabel *label=objc_getAssociatedObject(cell,TPFallbackLabelKey);
         if(label.superview==table)[self positionOverlayLabel:label forCell:cell];
     }
-    if(shifted>0||cumulative>0.5)[TPDebugLogger.shared log:[NSString stringWithFormat:@"render visible-spacing table=%@ shifted=%ld totalExtra=%.1f",NSStringFromClass(table.class),(long)shifted,cumulative]];
+    if(shifted>0||cumulative>0.5)[TPDebugLogger.shared log:[NSString stringWithFormat:@"render visible-spacing table=%@ shifted=%ld totalExtra=%.1f contentHeight=%.1f nearBottom=%@",NSStringFromClass(table.class),(long)shifted,cumulative,newSize.height,nearBottom?@"YES":@"NO"]];
 }
 
 +(void)refreshVisibleSpacingInRoot:(UIView*)root{
@@ -703,6 +723,13 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     objc_setAssociatedObject(cell,TPMessageKey,nil,OBJC_ASSOCIATION_COPY_NONATOMIC);
     objc_setAssociatedObject(cell,TPTranslationTextKey,nil,OBJC_ASSOCIATION_COPY_NONATOMIC);
     objc_setAssociatedObject(cell,TPReservedHeightKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    CGFloat oldShift=[objc_getAssociatedObject(cell,TPAppliedShiftKey) doubleValue];
+    if(fabs(oldShift)>0.5){
+        CGRect f=cell.frame;
+        f.origin.y-=oldShift;
+        cell.frame=f;
+    }
+    cell.transform=CGAffineTransformIdentity;
     NSValue *base=objc_getAssociatedObject(cell,TPBaseTransformKey);
     if(base)cell.transform=[base CGAffineTransformValue];
     objc_setAssociatedObject(cell,TPBaseTransformKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
