@@ -57,6 +57,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
 }
 + (BOOL)viewLooksLikeMessageHost:(UIView *)view message:(TPExtractedMessage *)message {
   if(!view||view.hidden||view.alpha<.05)return NO;
+  if([view isKindOfClass:UITableViewCell.class]||[view isKindOfClass:UICollectionViewCell.class])return NO;
   if(view==message.sourceView)return YES;
   NSString *text=[self textFromSource:view];
   if([self string:text containsMessage:message.text])return YES;
@@ -74,10 +75,26 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   NSMutableArray *raw=[NSMutableArray array];
   NSMutableSet *seen=[NSMutableSet set];
   void (^add)(UIView*)=^(UIView *v){ if(!v)return; NSValue *key=[NSValue valueWithNonretainedObject:v]; if([seen containsObject:key])return; [seen addObject:key]; [raw addObject:v]; };
-  for(UIView *v=message.sourceView;v;v=v.superview){ add(v); if(v==message.cell)break; }
   NSMutableArray *desc=[NSMutableArray array]; [self collectViews:message.cell into:desc];
   for(UIView *v in desc)if([self viewLooksLikeMessageHost:v message:message])add(v);
+  if(message.sourceView&&![message.sourceView isKindOfClass:UITableViewCell.class]&&![message.sourceView isKindOfClass:UICollectionViewCell.class])add(message.sourceView);
+  for(UIView *v=message.sourceView.superview;v;v=v.superview){ if(v==message.cell)break; if([self viewLooksLikeMessageHost:v message:message])add(v); }
   return raw;
+}
++ (NSString *)debugViewSummaryForCell:(UIView *)cell message:(NSString *)message {
+  NSMutableArray *views=[NSMutableArray array]; [self collectViews:cell into:views];
+  NSMutableArray *parts=[NSMutableArray array];
+  for(UIView *v in views){
+    NSString *name=NSStringFromClass(v.class);
+    NSString *lower=name.lowercaseString;
+    NSString *text=[self textFromSource:v];
+    BOOL interesting=[lower containsString:@"message"]||[lower containsString:@"text"]||[lower containsString:@"bubble"]||[self string:text containsMessage:message]||[self string:v.accessibilityLabel containsMessage:message];
+    if(!interesting)continue;
+    CGRect r=[v convertRect:v.bounds toView:cell];
+    [parts addObject:[NSString stringWithFormat:@"%@ frame=(%.0f,%.0f,%.0f,%.0f) text=%@ acc=%@",name,CGRectGetMinX(r),CGRectGetMinY(r),CGRectGetWidth(r),CGRectGetHeight(r),text.length?@"YES":@"NO",v.accessibilityLabel.length?@"YES":@"NO"]];
+    if(parts.count>=20)break;
+  }
+  return [parts componentsJoinedByString:@" | "];
 }
 + (NSMutableAttributedString *)baseAttributedTextForSource:(UIView *)source {
   NSAttributedString *stored=objc_getAssociatedObject(source,TPOriginalAttributedTextKey);
@@ -113,6 +130,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   }
 }
 + (BOOL)setStyledText:(NSAttributedString *)styled plain:(NSString *)plain source:(UIView *)source failed:(BOOL)failed usedKey:(NSString **)usedKey {
+  if([source isKindOfClass:UITableViewCell.class]||[source isKindOfClass:UICollectionViewCell.class])return NO;
   if([source isKindOfClass:UILabel.class]){
     UILabel *label=(UILabel*)source; label.numberOfLines=0; label.attributedText=styled; label.userInteractionEnabled=failed; if(usedKey)*usedKey=@"UILabel.attributedText"; return YES;
   }
@@ -172,6 +190,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
     }
   }
   TPDebugLogger.shared.lastError=[NSString stringWithFormat:@"未找到可写消息文本宿主: %@",NSStringFromClass(message.sourceView.class)];
+  [TPDebugLogger.shared log:[@"host candidates " stringByAppendingString:[self debugViewSummaryForCell:message.cell message:message.text]?:@"none"]];
   UILabel *label=[self fallbackLabelForMessage:message failed:failed];
   label.text=line;
   [self refreshLayoutAroundCell:message.cell];
