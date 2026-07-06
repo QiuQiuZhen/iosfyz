@@ -1,6 +1,6 @@
 Package: com.local.translateplugin
 Name: TranslatePlugin
-Version: 3.0.0
+Version: 3.1.0
 Architecture: iphoneos-arm
 Description: Conservative WhatsApp translation helper
 Maintainer: Local
