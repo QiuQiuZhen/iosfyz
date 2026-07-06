@@ -10,6 +10,7 @@ static const void *TPTranslationTextKey=&TPTranslationTextKey;
 static const void *TPSourceViewKey=&TPSourceViewKey;
 static const void *TPFallbackLabelKey=&TPFallbackLabelKey;
 static const void *TPFallbackConstraintsKey=&TPFallbackConstraintsKey;
+static const void *TPFallbackSpacerKey=&TPFallbackSpacerKey;
 static const void *TPOriginalTextKey=&TPOriginalTextKey;
 static const void *TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey;
 static const void *TPOriginalLinesKey=&TPOriginalLinesKey;
@@ -348,10 +349,13 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
 
 +(void)removeFallbackFromCell:(UIView*)cell{
     UILabel *label=objc_getAssociatedObject(cell,TPFallbackLabelKey);
+    UIView *spacer=objc_getAssociatedObject(cell,TPFallbackSpacerKey);
     NSArray *constraints=objc_getAssociatedObject(cell,TPFallbackConstraintsKey);
     if(constraints.count)[NSLayoutConstraint deactivateConstraints:constraints];
     [label removeFromSuperview];
+    [spacer removeFromSuperview];
     objc_setAssociatedObject(cell,TPFallbackLabelKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell,TPFallbackSpacerKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(cell,TPFallbackConstraintsKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
@@ -378,6 +382,37 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
     [label setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
     return label;
+}
+
++(NSArray*)installCellSpacerForMessage:(TPExtractedMessage*)message label:(UILabel*)label{
+    UIView *host=nil;
+    if([message.cell respondsToSelector:@selector(contentView)])host=((UITableViewCell*)message.cell).contentView;
+    if(!host)host=message.cell;
+    UIView *spacer=objc_getAssociatedObject(message.cell,TPFallbackSpacerKey);
+    if(!spacer){
+        spacer=[UIView new];
+        spacer.hidden=YES;
+        spacer.userInteractionEnabled=NO;
+        spacer.translatesAutoresizingMaskIntoConstraints=NO;
+        objc_setAssociatedObject(message.cell,TPFallbackSpacerKey,spacer,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if(spacer.superview!=host){
+        [spacer removeFromSuperview];
+        [host addSubview:spacer];
+    }
+    spacer.translatesAutoresizingMaskIntoConstraints=NO;
+    NSLayoutConstraint *top=[spacer.topAnchor constraintGreaterThanOrEqualToAnchor:label.bottomAnchor constant:8.0];
+    NSLayoutConstraint *height=[spacer.heightAnchor constraintGreaterThanOrEqualToConstant:8.0];
+    NSLayoutConstraint *bottom=[spacer.bottomAnchor constraintEqualToAnchor:host.bottomAnchor constant:-2.0];
+    NSLayoutConstraint *leading=[spacer.leadingAnchor constraintEqualToAnchor:host.leadingAnchor];
+    NSLayoutConstraint *trailing=[spacer.trailingAnchor constraintEqualToAnchor:host.trailingAnchor];
+    bottom.priority=UILayoutPriorityRequired;
+    NSArray *constraints=@[top,height,bottom,leading,trailing];
+    @try{[NSLayoutConstraint activateConstraints:constraints];}
+    @catch(NSException *e){[TPDebugLogger.shared log:[NSString stringWithFormat:@"render spacer constraints exception=%@",e.reason?:@"unknown"]];}
+    host.clipsToBounds=NO;
+    message.cell.clipsToBounds=NO;
+    return constraints;
 }
 
 +(BOOL)renderBubbleFallbackForMessage:(TPExtractedMessage*)message line:(NSString*)line failed:(BOOL)failed strategyName:(NSString*)strategyName{
@@ -407,6 +442,8 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     }
     @try{[NSLayoutConstraint activateConstraints:constraints];}
     @catch(NSException *e){[TPDebugLogger.shared log:[NSString stringWithFormat:@"render constraints exception=%@",e.reason?:@"unknown"]];}
+    NSArray *spacerConstraints=[self installCellSpacerForMessage:message label:label];
+    [constraints addObjectsFromArray:spacerConstraints];
     objc_setAssociatedObject(message.cell,TPFallbackConstraintsKey,constraints,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     container.clipsToBounds=NO;
     for(UIView *v=container.superview;v&&v!=message.cell.superview;v=v.superview)v.clipsToBounds=NO;
@@ -423,10 +460,12 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
         }
         label.translatesAutoresizingMaskIntoConstraints=YES;
         label.frame=CGRectIntegral(CGRectMake(CGRectGetMinX(sourceRect),y,maxWidth,fit.height));
+        NSArray *frameSpacer=[self installCellSpacerForMessage:message label:label];
+        objc_setAssociatedObject(message.cell,TPFallbackConstraintsKey,frameSpacer,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     [container bringSubviewToFront:label];
     [self refreshLayoutAroundCell:message.cell];
-    [TPDebugLogger.shared log:[NSString stringWithFormat:@"render strategy=%@ cell=%@ container=%@ bubbleFound=YES source=%@ status=%@ labelFrame=%@ constraints=%lu layoutRefreshed=YES",
+    [TPDebugLogger.shared log:[NSString stringWithFormat:@"render strategy=%@ cell=%@ container=%@ bubbleFound=YES source=%@ status=%@ labelFrame=%@ constraints=%lu spacer=YES layoutRefreshed=YES",
                                strategyName,NSStringFromClass(message.cell.class),NSStringFromClass(container.class),NSStringFromClass(source.class),status?NSStringFromClass(status.class):@"none",NSStringFromCGRect(label.frame),(unsigned long)constraints.count]];
     return YES;
 }
@@ -443,6 +482,8 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     label.translatesAutoresizingMaskIntoConstraints=YES;
     CGSize fit=[label sizeThatFits:CGSizeMake(width,CGFLOAT_MAX)];
     label.frame=CGRectIntegral(CGRectMake(CGRectGetMinX(sourceRect),CGRectGetMaxY(sourceRect)+4.0,width,fit.height));
+    NSArray *spacerConstraints=[self installCellSpacerForMessage:message label:label];
+    objc_setAssociatedObject(message.cell,TPFallbackConstraintsKey,spacerConstraints,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     host.clipsToBounds=NO;
     [host bringSubviewToFront:label];
     [self refreshLayoutAroundCell:message.cell];

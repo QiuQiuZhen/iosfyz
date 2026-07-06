@@ -93,7 +93,7 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
     [self collectFromView:root cells:cells stats:stats depth:0];
     BOOL selfChat=[TPMessageScanner isSelfChat:chat];
     BOOL allowOutgoing=settings.translateOutgoing||selfChat;
-    NSInteger extracted=0,queued=0,cached=0,renderedCached=0,skippedNoText=0,skippedOutgoing=0,skippedAlreadyTranslated=0,skippedTranslating=0,skippedInvisible=0,skippedSame=0,skippedInFlight=0,cellReset=0;
+    NSInteger extracted=0,queued=0,cached=0,renderedCached=0,skippedNoText=0,skippedOutgoing=0,skippedAlreadyTranslated=0,skippedTranslating=0,skippedInvisible=0,skippedSame=0,skippedInFlight=0,cellReset=0,detailLogs=0;
     NSMutableDictionary *skipReasons=[NSMutableDictionary dictionary];
     [TPDebugLogger.shared log:[NSString stringWithFormat:@"scan begin time=%@ chat=%@ root=%@ composer=%@ scrollViews=%ld tableViews=%ld collectionViews=%ld messageCells=%ld",
                                started,chat?:@"unknown",NSStringFromClass(root.class),NSStringFromClass(composer.class),
@@ -105,13 +105,19 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
         if(!message){
             skippedNoText++;
             [self mergeExtractorDiagnostics:diag intoReasons:skipReasons];
-            [TPDebugLogger.shared log:[NSString stringWithFormat:@"extract skipped cell=%@ result=%@ visited=%@ accepted=%@ skipped=%@ reasons=%@",
-                                       NSStringFromClass(cell.class),diag[@"result"]?:@"nil",diag[@"visitedViews"]?:@0,diag[@"acceptedCandidates"]?:@0,diag[@"skippedCandidates"]?:@0,[self reasonSummary:diag[@"skipReasons"]]]];
+            if(detailLogs<12){
+                detailLogs++;
+                [TPDebugLogger.shared log:[NSString stringWithFormat:@"extract skipped cell=%@ result=%@ visited=%@ accepted=%@ skipped=%@ reasons=%@",
+                                           NSStringFromClass(cell.class),diag[@"result"]?:@"nil",diag[@"visitedViews"]?:@0,diag[@"acceptedCandidates"]?:@0,diag[@"skippedCandidates"]?:@0,[self reasonSummary:diag[@"skipReasons"]]]];
+            }
             continue;
         }
         extracted++;
-        [TPDebugLogger.shared log:[NSString stringWithFormat:@"extract ok cell=%@ source=%@ prop=%@ len=%lu preview=%@ containsChinese=%@ outgoing=%@ key=%@",
-                                   NSStringFromClass(cell.class),message.sourceClass?:@"unknown",message.sourceProperty?:@"unknown",(unsigned long)message.text.length,message.preview?:@"",message.containsChinese?@"YES":@"NO",message.outgoing?@"YES":@"NO",message.messageId?:@"nil"]];
+        if(detailLogs<20){
+            detailLogs++;
+            [TPDebugLogger.shared log:[NSString stringWithFormat:@"extract ok cell=%@ source=%@ prop=%@ len=%lu preview=%@ containsChinese=%@ outgoing=%@ key=%@",
+                                       NSStringFromClass(cell.class),message.sourceClass?:@"unknown",message.sourceProperty?:@"unknown",(unsigned long)message.text.length,message.preview?:@"",message.containsChinese?@"YES":@"NO",message.outgoing?@"YES":@"NO",message.messageId?:@"nil"]];
+        }
         if(message.outgoing&&!allowOutgoing){
             skippedOutgoing++;
             [TPDebugLogger.shared log:[NSString stringWithFormat:@"skip key=%@ reason=outgoing-disabled",message.messageId?:@"nil"]];

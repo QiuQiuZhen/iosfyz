@@ -8,6 +8,8 @@ static const NSUInteger TPDebugLogMaxLines=1000;
 @interface TPDebugLogger()
 @property(nonatomic,strong)NSMutableArray *lines;
 @property(nonatomic,copy)NSString *logFilePath;
+@property(nonatomic)NSUInteger dirtyLineCount;
+@property(nonatomic)NSTimeInterval lastPersistTime;
 @end
 
 @implementation TPDebugLogger
@@ -21,6 +23,7 @@ static const NSUInteger TPDebugLogMaxLines=1000;
         x.lines=[saved mutableCopy]?:[NSMutableArray array];
         x.pageState=@"unknown";
         x.logFilePath=[x defaultLogFilePath];
+        x.lastPersistTime=NSDate.date.timeIntervalSince1970;
         NSArray *fileLines=[x readFileLines];
         if(fileLines.count>x.lines.count)x.lines=[[x tail:fileLines limit:TPDebugLogMaxLines] mutableCopy];
     });
@@ -69,16 +72,22 @@ static const NSUInteger TPDebugLogMaxLines=1000;
     [NSUserDefaults.standardUserDefaults synchronize];
     NSString *body=[self.lines componentsJoinedByString:@"\n"];
     [body writeToFile:self.logFilePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    self.dirtyLineCount=0;
+    self.lastPersistTime=NSDate.date.timeIntervalSince1970;
 }
 
 -(void)log:(NSString*)message{
     if(!message.length)return;
     message=[self redactedMessage:message];
     NSString *line=[NSString stringWithFormat:@"%@ %@",NSDate.date,message];
-    @synchronized(self.lines){
+    @synchronized(self){
         [self.lines addObject:line];
         while(self.lines.count>TPDebugLogMaxLines)[self.lines removeObjectAtIndex:0];
-        [self persistLinesLocked];
+        self.dirtyLineCount++;
+        NSString *lower=message.lowercaseString?:@"";
+        BOOL urgent=[lower containsString:@"error"]||[lower containsString:@"plugin started"]||[lower containsString:@"translate done"]||[lower containsString:@"debug log"];
+        NSTimeInterval now=NSDate.date.timeIntervalSince1970;
+        if(urgent||self.dirtyLineCount>=20||now-self.lastPersistTime>=1.5)[self persistLinesLocked];
     }
     if(TPSettings.shared.debugLogEnabled)NSLog(@"[TranslatePlugin] %@",message);
 }
@@ -91,7 +100,10 @@ static const NSUInteger TPDebugLogMaxLines=1000;
 -(NSString*)exportText{
     NSMutableArray *out=[NSMutableArray array];
     NSMutableArray *merged=[NSMutableArray array];
-    @synchronized(self.lines){[merged addObjectsFromArray:self.lines];}
+    @synchronized(self){
+        if(self.dirtyLineCount>0)[self persistLinesLocked];
+        [merged addObjectsFromArray:self.lines];
+    }
     NSArray *fileLines=[self readFileLines];
     if(fileLines.count){
         NSMutableSet *seen=[NSMutableSet setWithArray:merged];

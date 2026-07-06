@@ -128,8 +128,8 @@
     [TPDebugLogger.shared log:[NSString stringWithFormat:@"chat page accepted vc=%@ chat=%@ composer=%@ listViews=%ld messageCells=%ld",className,self.chatId,NSStringFromClass(composer.class),(long)lists,(long)[stats[@"messageLikeCells"] integerValue]]];
     if([composer isKindOfClass:UITextView.class])[TPComposerController.shared attachToComposer:(UITextView*)composer chatId:self.chatId];
     if(!self.timer){
-        self.timer=[NSTimer scheduledTimerWithTimeInterval:1.5 target:self selector:@selector(rescan) userInfo:nil repeats:YES];
-        self.timer.tolerance=0.35;
+        self.timer=[NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(rescan) userInfo:nil repeats:YES];
+        self.timer.tolerance=0.2;
     }
     [self rescan];
     return YES;
