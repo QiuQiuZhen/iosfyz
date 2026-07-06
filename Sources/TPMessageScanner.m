@@ -113,11 +113,6 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
             continue;
         }
         extracted++;
-        if(detailLogs<20){
-            detailLogs++;
-            [TPDebugLogger.shared log:[NSString stringWithFormat:@"extract ok cell=%@ source=%@ prop=%@ len=%lu preview=%@ containsChinese=%@ outgoing=%@ key=%@",
-                                       NSStringFromClass(cell.class),message.sourceClass?:@"unknown",message.sourceProperty?:@"unknown",(unsigned long)message.text.length,message.preview?:@"",message.containsChinese?@"YES":@"NO",message.outgoing?@"YES":@"NO",message.messageId?:@"nil"]];
-        }
         if(message.outgoing&&!allowOutgoing){
             skippedOutgoing++;
             [TPDebugLogger.shared log:[NSString stringWithFormat:@"skip key=%@ reason=outgoing-disabled",message.messageId?:@"nil"]];
@@ -135,6 +130,11 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
             if(state==TPBubbleStateTranslated){skippedAlreadyTranslated++;continue;}
             if(state==TPBubbleStateTranslating){skippedTranslating++;continue;}
             if(state==TPBubbleStateFailed){skippedSame++;continue;}
+        }
+        if(detailLogs<20){
+            detailLogs++;
+            [TPDebugLogger.shared log:[NSString stringWithFormat:@"extract ok cell=%@ source=%@ prop=%@ len=%lu preview=%@ containsChinese=%@ outgoing=%@ key=%@",
+                                       NSStringFromClass(cell.class),message.sourceClass?:@"unknown",message.sourceProperty?:@"unknown",(unsigned long)message.text.length,message.preview?:@"",message.containsChinese?@"YES":@"NO",message.outgoing?@"YES":@"NO",message.messageId?:@"nil"]];
         }
         objc_setAssociatedObject(cell,TPMessageIdentityKey,message.messageId,OBJC_ASSOCIATION_COPY_NONATOMIC);
         NSDictionary *cachedEntry=[TPCacheStore.shared entryForChat:chat text:message.text target:settings.targetLanguage];
@@ -164,6 +164,7 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
                        (long)extracted,(long)queued,(long)cached,(long)renderedCached,(long)skippedNoText,(long)skippedOutgoing,(long)skippedAlreadyTranslated,(long)skippedTranslating,(long)skippedSame,(long)skippedInFlight,(long)skippedInvisible,(long)cellReset,[self reasonSummary:skipReasons]];
     TPDebugLogger.shared.scanSummary=summary;
     [TPDebugLogger.shared log:summary];
+    [TPTranslationRenderer refreshVisibleSpacingInRoot:root];
 }
 
 -(void)translate:(TPExtractedMessage*)message chat:(NSString*)chat requestKey:(NSString*)requestKey{

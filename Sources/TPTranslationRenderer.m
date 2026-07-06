@@ -11,6 +11,9 @@ static const void *TPSourceViewKey=&TPSourceViewKey;
 static const void *TPFallbackLabelKey=&TPFallbackLabelKey;
 static const void *TPFallbackConstraintsKey=&TPFallbackConstraintsKey;
 static const void *TPFallbackSpacerKey=&TPFallbackSpacerKey;
+static const void *TPReservedHeightKey=&TPReservedHeightKey;
+static const void *TPBaseTransformKey=&TPBaseTransformKey;
+static const void *TPAppliedShiftKey=&TPAppliedShiftKey;
 static const void *TPOriginalTextKey=&TPOriginalTextKey;
 static const void *TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey;
 static const void *TPOriginalLinesKey=&TPOriginalLinesKey;
@@ -415,6 +418,73 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     return constraints;
 }
 
++(void)collectTablesInView:(UIView*)view into:(NSMutableArray*)tables depth:(NSUInteger)depth{
+    if(!view||depth>80)return;
+    if([view isKindOfClass:UITableView.class])[tables addObject:view];
+    for(UIView *sub in view.subviews)[self collectTablesInView:sub into:tables depth:depth+1];
+}
+
++(UITableView*)tableForCell:(UIView*)cell{
+    UIView *v=cell.superview;
+    while(v&&![v isKindOfClass:UITableView.class])v=v.superview;
+    return (UITableView*)v;
+}
+
++(CGFloat)reservedHeightForCell:(UIView*)cell{
+    NSNumber *n=objc_getAssociatedObject(cell,TPReservedHeightKey);
+    return n?MAX(0.0,n.doubleValue):0.0;
+}
+
++(void)updateReservedHeightForMessage:(TPExtractedMessage*)message label:(UILabel*)label{
+    if(!message.cell||!label)return;
+    CGRect r=[label convertRect:label.bounds toView:message.cell];
+    CGFloat required=CGRectGetMaxY(r)+12.0-CGRectGetHeight(message.cell.bounds);
+    CGFloat extra=MAX(0.0,MIN(required,80.0));
+    if(extra<3.0)extra=0.0;
+    objc_setAssociatedObject(message.cell,TPReservedHeightKey,@(extra),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [TPDebugLogger.shared log:[NSString stringWithFormat:@"render spacing-reserve cell=%@ labelInCell=%@ cellBounds=%@ extra=%.1f",
+                               NSStringFromClass(message.cell.class),NSStringFromCGRect(r),NSStringFromCGRect(message.cell.bounds),extra]];
+}
+
++(void)refreshVisibleSpacingInTable:(UITableView*)table{
+    NSArray *cells=[[table visibleCells] sortedArrayUsingComparator:^NSComparisonResult(id obj1,id obj2){
+        UIView *a=obj1;
+        UIView *b=obj2;
+        CGFloat ay=CGRectGetMinY(a.frame),by=CGRectGetMinY(b.frame);
+        if(ay<by)return NSOrderedAscending;
+        if(ay>by)return NSOrderedDescending;
+        return NSOrderedSame;
+    }];
+    CGFloat cumulative=0.0;
+    NSInteger shifted=0;
+    for(UIView *cell in cells){
+        NSValue *baseValue=objc_getAssociatedObject(cell,TPBaseTransformKey);
+        NSNumber *appliedValue=objc_getAssociatedObject(cell,TPAppliedShiftKey);
+        if(!baseValue||!appliedValue){
+            objc_setAssociatedObject(cell,TPBaseTransformKey,[NSValue valueWithCGAffineTransform:cell.transform],OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            baseValue=objc_getAssociatedObject(cell,TPBaseTransformKey);
+        }
+        CGAffineTransform base=baseValue?[baseValue CGAffineTransformValue]:CGAffineTransformIdentity;
+        CGFloat applied=cumulative;
+        cell.transform=CGAffineTransformTranslate(base,0,applied);
+        objc_setAssociatedObject(cell,TPAppliedShiftKey,@(applied),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if(applied>0.5)shifted++;
+        cumulative+=[self reservedHeightForCell:cell];
+    }
+    if(shifted>0||cumulative>0.5)[TPDebugLogger.shared log:[NSString stringWithFormat:@"render visible-spacing table=%@ shifted=%ld totalExtra=%.1f",NSStringFromClass(table.class),(long)shifted,cumulative]];
+}
+
++(void)refreshVisibleSpacingInRoot:(UIView*)root{
+    NSMutableArray *tables=[NSMutableArray array];
+    [self collectTablesInView:root into:tables depth:0];
+    for(UITableView *table in tables)[self refreshVisibleSpacingInTable:table];
+}
+
++(void)refreshVisibleSpacingNearCell:(UIView*)cell{
+    UITableView *table=[self tableForCell:cell];
+    if(table)[self refreshVisibleSpacingInTable:table];
+}
+
 +(BOOL)renderBubbleFallbackForMessage:(TPExtractedMessage*)message line:(NSString*)line failed:(BOOL)failed strategyName:(NSString*)strategyName{
     UIView *source=message.sourceView?:message.cell;
     UIView *container=[self bubbleContainerForMessage:message];
@@ -465,6 +535,8 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     }
     [container bringSubviewToFront:label];
     [self refreshLayoutAroundCell:message.cell];
+    [self updateReservedHeightForMessage:message label:label];
+    [self refreshVisibleSpacingNearCell:message.cell];
     [TPDebugLogger.shared log:[NSString stringWithFormat:@"render strategy=%@ cell=%@ container=%@ bubbleFound=YES source=%@ status=%@ labelFrame=%@ constraints=%lu spacer=YES layoutRefreshed=YES",
                                strategyName,NSStringFromClass(message.cell.class),NSStringFromClass(container.class),NSStringFromClass(source.class),status?NSStringFromClass(status.class):@"none",NSStringFromCGRect(label.frame),(unsigned long)constraints.count]];
     return YES;
@@ -487,6 +559,8 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     host.clipsToBounds=NO;
     [host bringSubviewToFront:label];
     [self refreshLayoutAroundCell:message.cell];
+    [self updateReservedHeightForMessage:message label:label];
+    [self refreshVisibleSpacingNearCell:message.cell];
     [TPDebugLogger.shared log:[NSString stringWithFormat:@"render strategy=cell-fallback cell=%@ host=%@ reason=no-bubble-container labelFrame=%@ layoutRefreshed=YES",
                                NSStringFromClass(message.cell.class),NSStringFromClass(host.class),NSStringFromCGRect(label.frame)]];
 }
@@ -559,7 +633,13 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     objc_setAssociatedObject(cell,TPStateKey,@(TPBubbleStateUnprocessed),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(cell,TPMessageKey,nil,OBJC_ASSOCIATION_COPY_NONATOMIC);
     objc_setAssociatedObject(cell,TPTranslationTextKey,nil,OBJC_ASSOCIATION_COPY_NONATOMIC);
+    objc_setAssociatedObject(cell,TPReservedHeightKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSValue *base=objc_getAssociatedObject(cell,TPBaseTransformKey);
+    if(base)cell.transform=[base CGAffineTransformValue];
+    objc_setAssociatedObject(cell,TPBaseTransformKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell,TPAppliedShiftKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [self refreshLayoutAroundCell:cell];
+    [self refreshVisibleSpacingNearCell:cell];
     [TPDebugLogger.shared log:[NSString stringWithFormat:@"render reset cell=%@ restoredSource=%@",NSStringFromClass(cell.class),source?NSStringFromClass(source.class):@"none"]];
 }
 
