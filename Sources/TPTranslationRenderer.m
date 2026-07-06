@@ -4,7 +4,7 @@
 #import "TPDebugLogger.h"
 #import <objc/runtime.h>
 
-static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceViewKey=&TPSourceViewKey,*TPFallbackLabelKey=&TPFallbackLabelKey,*TPAdjustedFramesKey=&TPAdjustedFramesKey,*TPOriginalTextKey=&TPOriginalTextKey,*TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey,*TPOriginalLinesKey=&TPOriginalLinesKey,*TPOriginalEditableKey=&TPOriginalEditableKey,*TPOriginalSelectableKey=&TPOriginalSelectableKey;
+static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceViewKey=&TPSourceViewKey,*TPFallbackLabelKey=&TPFallbackLabelKey,*TPAdjustedFramesKey=&TPAdjustedFramesKey,*TPSpacingAppliedKey=&TPSpacingAppliedKey,*TPOriginalTextKey=&TPOriginalTextKey,*TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey,*TPOriginalLinesKey=&TPOriginalLinesKey,*TPOriginalEditableKey=&TPOriginalEditableKey,*TPOriginalSelectableKey=&TPOriginalSelectableKey;
 
 @implementation TPTranslationRenderer
 
@@ -162,6 +162,21 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   if(!view)return;
   [frames addObject:@{@"view":[NSValue valueWithNonretainedObject:view],@"frame":[NSValue valueWithCGRect:view.frame]}];
 }
++ (UITableView *)tableForCell:(UIView *)cell {
+  for(UIView *v=cell.superview;v;v=v.superview)if([v isKindOfClass:UITableView.class])return (UITableView*)v;
+  return nil;
+}
++ (void)pushVisibleCellsBelowCell:(UIView *)cell extra:(CGFloat)extra {
+  if(extra<=0||[objc_getAssociatedObject(cell,TPSpacingAppliedKey) boolValue])return;
+  UITableView *table=[self tableForCell:cell]; if(!table)return;
+  CGFloat bottom=CGRectGetMaxY(cell.frame)-.5;
+  for(UITableViewCell *other in table.visibleCells){if(other==cell)continue;CGRect f=other.frame;if(CGRectGetMinY(f)>bottom){f.origin.y+=extra;other.frame=f;}}
+  CGSize size=table.contentSize; size.height+=extra; table.contentSize=size;
+  objc_setAssociatedObject(cell,TPSpacingAppliedKey,@YES,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
++ (void)refreshViewsOnlyAroundCell:(UIView *)cell {
+  for(UIView *v=cell;v;v=v.superview){[v setNeedsDisplay];[v setNeedsLayout];}
+}
 + (UILabel *)fallbackLabelForMessage:(TPExtractedMessage *)message failed:(BOOL)failed text:(NSString *)text {
   UILabel *label=objc_getAssociatedObject(message.cell,TPFallbackLabelKey);
   UIView *source=message.sourceView?:message.cell;
@@ -198,6 +213,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
       CGRect f=v.frame; f.size.height+=extra; v.frame=f; v.clipsToBounds=NO;
     }
     if(status){CGRect sf=status.frame; sf.origin.y+=extra; status.frame=sf;}
+    [self pushVisibleCellsBelowCell:message.cell extra:extra];
   }
   label.frame=CGRectIntegral(CGRectMake(CGRectGetMinX(r)+10,CGRectGetMaxY(r)+2,width,height));
   [container bringSubviewToFront:label];
@@ -225,7 +241,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   TPDebugLogger.shared.lastError=[NSString stringWithFormat:@"未找到可写消息文本宿主: %@",NSStringFromClass(message.sourceView.class)];
   [TPDebugLogger.shared log:[@"host candidates " stringByAppendingString:[self debugViewSummaryForCell:message.cell message:message.text]?:@"none"]];
   [self fallbackLabelForMessage:message failed:failed text:line];
-  [self refreshLayoutAroundCell:message.cell];
+  [self refreshViewsOnlyAroundCell:message.cell];
 }
 
 + (void)setTranslatingForMessage:(TPExtractedMessage *)message { [self setState:TPBubbleStateTranslating message:message text:@""]; }
@@ -243,6 +259,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   UILabel *fallback=objc_getAssociatedObject(cell,TPFallbackLabelKey);
   [fallback removeFromSuperview];
   objc_setAssociatedObject(cell,TPFallbackLabelKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  objc_setAssociatedObject(cell,TPSpacingAppliedKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   NSArray *frames=objc_getAssociatedObject(cell,TPAdjustedFramesKey);
   for(NSDictionary *entry in frames){UIView *v=[entry[@"view"] nonretainedObjectValue];NSValue *frame=entry[@"frame"];if(v&&frame)v.frame=frame.CGRectValue;}
   objc_setAssociatedObject(cell,TPAdjustedFramesKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
