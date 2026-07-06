@@ -164,7 +164,9 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
     [self rememberOriginalSource:host cell:message.cell];
     NSString *used=nil;
     if([self renderInlineLine:line source:host failed:failed usedKey:&used]){
-      TPDebugLogger.shared.scanSummary=[NSString stringWithFormat:@"inline=%@ key=%@",NSStringFromClass(host.class),used?:@"unknown"];
+      NSString *summary=[NSString stringWithFormat:@"inline=%@ key=%@",NSStringFromClass(host.class),used?:@"unknown"];
+      TPDebugLogger.shared.scanSummary=summary;
+      [TPDebugLogger.shared log:[@"render " stringByAppendingString:summary]];
       [self refreshLayoutAroundCell:message.cell];
       return;
     }
