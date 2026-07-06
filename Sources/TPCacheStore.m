@@ -3,7 +3,7 @@
 #import <CommonCrypto/CommonDigest.h>
 @interface TPCacheStore() @property(nonatomic,strong)NSMutableDictionary*items; @end
 @implementation TPCacheStore
-+(instancetype)shared{static id x;static dispatch_once_t o;dispatch_once(&o,^{x=[self new];NSDictionary*d=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"TPTranslationCacheV3"];x.items=[d mutableCopy]?:[NSMutableDictionary dictionary];});return x;}
++(instancetype)shared{static TPCacheStore *x;static dispatch_once_t o;dispatch_once(&o,^{x=[self new];NSDictionary*d=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"TPTranslationCacheV3"];x.items=[d mutableCopy]?:[NSMutableDictionary dictionary];});return x;}
 - (NSString*)hash:(NSString*)s{NSData*d=[s dataUsingEncoding:NSUTF8StringEncoding];unsigned char out[CC_SHA256_DIGEST_LENGTH];CC_SHA256(d.bytes,(CC_LONG)d.length,out);NSMutableString*r=[NSMutableString string];for(int i=0;i<CC_SHA256_DIGEST_LENGTH;i++)[r appendFormat:@"%02x",out[i]];return r;}
 - (NSString*)keyChat:(NSString*)chat text:(NSString*)text target:(NSString*)target{return [NSString stringWithFormat:@"%@|%@|%@",chat?:@"unknown",[self hash:text?:@""],target?:@"zh-CN"];}
 - (NSDictionary*)entryForChat:(NSString*)chat text:(NSString*)text target:(NSString*)target{if(!TPSettings.shared.enableCache)return nil;@synchronized(self){return self.items[[self keyChat:chat text:text target:target]];}}
