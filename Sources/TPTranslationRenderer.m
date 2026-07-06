@@ -11,6 +11,7 @@ static const void *TPSourceViewKey=&TPSourceViewKey;
 static const void *TPFallbackLabelKey=&TPFallbackLabelKey;
 static const void *TPFallbackConstraintsKey=&TPFallbackConstraintsKey;
 static const void *TPFallbackSpacerKey=&TPFallbackSpacerKey;
+static const void *TPFallbackSourceKey=&TPFallbackSourceKey;
 static const void *TPReservedHeightKey=&TPReservedHeightKey;
 static const void *TPBaseTransformKey=&TPBaseTransformKey;
 static const void *TPAppliedShiftKey=&TPAppliedShiftKey;
@@ -21,6 +22,12 @@ static const void *TPOriginalEditableKey=&TPOriginalEditableKey;
 static const void *TPOriginalSelectableKey=&TPOriginalSelectableKey;
 static const void *TPOriginalInteractionKey=&TPOriginalInteractionKey;
 static const NSInteger TPTranslationLabelTag=0x7A71001;
+
+@interface TPTranslationRenderer()
++(UITableView*)tableForCell:(UIView*)cell;
++(void)updateReservedHeightForMessage:(TPExtractedMessage*)message label:(UILabel*)label;
++(void)refreshVisibleSpacingNearCell:(UIView*)cell;
+@end
 
 @implementation TPTranslationRenderer
 
@@ -359,6 +366,7 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     [spacer removeFromSuperview];
     objc_setAssociatedObject(cell,TPFallbackLabelKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(cell,TPFallbackSpacerKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell,TPFallbackSourceKey,nil,OBJC_ASSOCIATION_ASSIGN);
     objc_setAssociatedObject(cell,TPFallbackConstraintsKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
@@ -385,6 +393,35 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
     [label setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
     return label;
+}
+
++(void)positionOverlayLabel:(UILabel*)label forCell:(UIView*)cell{
+    UITableView *table=[self tableForCell:cell];
+    UIView *source=objc_getAssociatedObject(cell,TPFallbackSourceKey);
+    if(!table||!label||!source||label.superview!=table||!source.window)return;
+    CGRect sourceRect=[source convertRect:source.bounds toView:table];
+    CGFloat width=MAX(80.0,MIN(CGRectGetWidth(sourceRect),CGRectGetWidth(table.bounds)-CGRectGetMinX(sourceRect)-12.0));
+    CGSize fit=[label sizeThatFits:CGSizeMake(width,CGFLOAT_MAX)];
+    label.frame=CGRectIntegral(CGRectMake(CGRectGetMinX(sourceRect),CGRectGetMaxY(sourceRect)+4.0,width,fit.height));
+    [table bringSubviewToFront:label];
+}
+
++(BOOL)renderTableOverlayFallbackForMessage:(TPExtractedMessage*)message line:(NSString*)line failed:(BOOL)failed source:(UIView*)source{
+    UITableView *table=[self tableForCell:message.cell];
+    if(!table||!source.window)return NO;
+    UILabel *label=[self preparedFallbackLabelForCell:message.cell container:table failed:failed source:source text:line];
+    NSArray *old=objc_getAssociatedObject(message.cell,TPFallbackConstraintsKey);
+    if(old.count)[NSLayoutConstraint deactivateConstraints:old];
+    objc_setAssociatedObject(message.cell,TPFallbackConstraintsKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(message.cell,TPFallbackSourceKey,source,OBJC_ASSOCIATION_ASSIGN);
+    label.translatesAutoresizingMaskIntoConstraints=YES;
+    [self positionOverlayLabel:label forCell:message.cell];
+    [self updateReservedHeightForMessage:message label:label];
+    [self refreshVisibleSpacingNearCell:message.cell];
+    [self positionOverlayLabel:label forCell:message.cell];
+    [TPDebugLogger.shared log:[NSString stringWithFormat:@"render strategy=table-overlay-fallback cell=%@ table=%@ source=%@ labelFrame=%@ layoutRefreshed=YES",
+                               NSStringFromClass(message.cell.class),NSStringFromClass(table.class),NSStringFromClass(source.class),NSStringFromCGRect(label.frame)]];
+    return YES;
 }
 
 +(NSArray*)installCellSpacerForMessage:(TPExtractedMessage*)message label:(UILabel*)label{
@@ -471,6 +508,10 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
         if(applied>0.5)shifted++;
         cumulative+=[self reservedHeightForCell:cell];
     }
+    for(UIView *cell in cells){
+        UILabel *label=objc_getAssociatedObject(cell,TPFallbackLabelKey);
+        if(label.superview==table)[self positionOverlayLabel:label forCell:cell];
+    }
     if(shifted>0||cumulative>0.5)[TPDebugLogger.shared log:[NSString stringWithFormat:@"render visible-spacing table=%@ shifted=%ld totalExtra=%.1f",NSStringFromClass(table.class),(long)shifted,cumulative]];
 }
 
@@ -489,6 +530,7 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     UIView *source=message.sourceView?:message.cell;
     UIView *container=[self bubbleContainerForMessage:message];
     if(!container||container==message.cell)return NO;
+    if([self renderTableOverlayFallbackForMessage:message line:line failed:failed source:source])return YES;
     UILabel *label=[self preparedFallbackLabelForCell:message.cell container:container failed:failed source:source text:line];
     label.translatesAutoresizingMaskIntoConstraints=NO;
     NSArray *old=objc_getAssociatedObject(message.cell,TPFallbackConstraintsKey);
@@ -610,7 +652,9 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     if(!translation.length)return NO;
     UILabel *fallback=objc_getAssociatedObject(message.cell,TPFallbackLabelKey);
     UIView *currentContainer=[self bubbleContainerForMessage:message];
-    BOOL staleContainer=(fallback&&currentContainer&&fallback.superview&&fallback.superview!=currentContainer);
+    UITableView *table=[self tableForCell:message.cell];
+    BOOL overlayFallback=(fallback&&table&&fallback.superview==table);
+    BOOL staleContainer=(fallback&&currentContainer&&fallback.superview&&fallback.superview!=currentContainer&&!overlayFallback);
     BOOL missingFallback=(!fallback||!fallback.superview||fallback.hidden||fallback.alpha<0.05||!fallback.text.length||(message.cell.window&&fallback.window!=message.cell.window)||staleContainer);
     if(missingFallback){
         [TPDebugLogger.shared log:[NSString stringWithFormat:@"render repair key=%@ reason=fallback-missing cell=%@ label=%@ superview=%@ currentContainer=%@ staleContainer=%@",
@@ -622,8 +666,10 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
         return YES;
     }
     [fallback.superview bringSubviewToFront:fallback];
+    if(overlayFallback)[self positionOverlayLabel:fallback forCell:message.cell];
     [self updateReservedHeightForMessage:message label:fallback];
     [self refreshVisibleSpacingNearCell:message.cell];
+    if(overlayFallback)[self positionOverlayLabel:fallback forCell:message.cell];
     return NO;
 }
 
