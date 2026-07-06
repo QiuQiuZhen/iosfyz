@@ -23,6 +23,14 @@
                                p.operatingSystemVersionString?:@"unknown"]];
 }
 
+-(BOOL)isTransientSystemController:(UIViewController*)vc{
+    NSString *name=NSStringFromClass(vc.class)?:@"";
+    NSArray *prefixes=@[@"UIKeyboard",@"UISystemKeyboard",@"UIInput",@"UITrackingElement",@"UITextEffects",@"UIPrediction",@"UICompatibilityInput"];
+    for(NSString *prefix in prefixes)if([name hasPrefix:prefix])return YES;
+    NSString *lower=name.lowercaseString;
+    return [lower containsString:@"keyboard"]||[lower containsString:@"inputwindow"]||[lower containsString:@"trackingelement"];
+}
+
 -(void)controllerDidAppear:(UIViewController*)vc{
     if(!vc.view.window)return;
     [TPRuntimeGuard performSafely:^{
@@ -30,6 +38,11 @@
         [TPDebugLogger.shared log:[NSString stringWithFormat:@"controller appeared %@",name]];
         if([vc isKindOfClass:UINavigationController.class]||[vc isKindOfClass:UITabBarController.class]){
             [TPDebugLogger.shared log:[NSString stringWithFormat:@"controller ignored container %@",name]];
+            return;
+        }
+        if([self isTransientSystemController:vc]){
+            [TPDebugLogger.shared log:[NSString stringWithFormat:@"controller ignored transient %@",name]];
+            if(TPChatPageObserver.shared.inChatPage)[TPChatPageObserver.shared rescan];
             return;
         }
         if([TPSettingsTabObserver.shared observeController:vc]){

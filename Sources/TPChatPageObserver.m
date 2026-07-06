@@ -20,6 +20,10 @@
     dispatch_once(&once,^{
         x=[self new];
         [NSNotificationCenter.defaultCenter addObserver:x selector:@selector(settingsChanged) name:TPSettingsDidChangeNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:x selector:@selector(keyboardChanged:) name:UIKeyboardWillShowNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:x selector:@selector(keyboardChanged:) name:UIKeyboardDidShowNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:x selector:@selector(keyboardChanged:) name:UIKeyboardWillHideNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:x selector:@selector(keyboardChanged:) name:UIKeyboardDidHideNotification object:nil];
     });
     return x;
 }
@@ -158,6 +162,14 @@
 
 -(void)settingsChanged{
     if(TPSettings.shared.autoTranslate&&self.inChatPage)[self rescan];
+}
+
+-(void)keyboardChanged:(NSNotification*)note{
+    if(!self.inChatPage||!self.root.window)return;
+    [TPDebugLogger.shared log:[NSString stringWithFormat:@"keyboard event=%@ chat=%@",note.name?:@"unknown",self.chatId?:@"unknown"]];
+    [self rescan];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.18*NSEC_PER_SEC)),dispatch_get_main_queue(),^{[self rescan];});
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.45*NSEC_PER_SEC)),dispatch_get_main_queue(),^{[self rescan];});
 }
 
 @end
