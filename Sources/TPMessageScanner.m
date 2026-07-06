@@ -93,7 +93,7 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
     [self collectFromView:root cells:cells stats:stats depth:0];
     BOOL selfChat=[TPMessageScanner isSelfChat:chat];
     BOOL allowOutgoing=settings.translateOutgoing||selfChat;
-    NSInteger extracted=0,queued=0,cached=0,renderedCached=0,skippedNoText=0,skippedOutgoing=0,skippedAlreadyTranslated=0,skippedTranslating=0,skippedInvisible=0,skippedSame=0,skippedInFlight=0,cellReset=0,detailLogs=0;
+    NSInteger extracted=0,queued=0,cached=0,renderedCached=0,repairedTranslated=0,skippedNoText=0,skippedOutgoing=0,skippedAlreadyTranslated=0,skippedTranslating=0,skippedInvisible=0,skippedSame=0,skippedInFlight=0,cellReset=0,detailLogs=0;
     NSMutableDictionary *skipReasons=[NSMutableDictionary dictionary];
     [TPDebugLogger.shared log:[NSString stringWithFormat:@"scan begin time=%@ chat=%@ root=%@ composer=%@ scrollViews=%ld tableViews=%ld collectionViews=%ld messageCells=%ld",
                                started,chat?:@"unknown",NSStringFromClass(root.class),NSStringFromClass(composer.class),
@@ -127,7 +127,11 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
         }
         TPBubbleState state=[TPTranslationRenderer stateForCell:cell];
         if([prior isEqualToString:message.messageId]){
-            if(state==TPBubbleStateTranslated){skippedAlreadyTranslated++;continue;}
+            if(state==TPBubbleStateTranslated){
+                if([TPTranslationRenderer maintainTranslationForMessage:message])repairedTranslated++;
+                skippedAlreadyTranslated++;
+                continue;
+            }
             if(state==TPBubbleStateTranslating){skippedTranslating++;continue;}
             if(state==TPBubbleStateFailed){skippedSame++;continue;}
         }
@@ -158,10 +162,10 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
         [self translate:message chat:chat requestKey:requestKey];
     }
     NSTimeInterval duration=-[started timeIntervalSinceNow];
-    NSString *summary=[NSString stringWithFormat:@"scan end chat=%@ selfChat=%@ allowOutgoing=%@ duration=%.3f scroll=%ld table=%ld collection=%ld messageCells=%ld visibleCells=%lu extracted=%ld queued=%ld cacheHits=%ld renderedCached=%ld skippedNoText=%ld skippedOutgoing=%ld skippedTranslated=%ld skippedTranslating=%ld skippedFailed=%ld skippedInFlight=%ld skippedInvisible=%ld cellReset=%ld extractorSkipReasons={%@}",
+    NSString *summary=[NSString stringWithFormat:@"scan end chat=%@ selfChat=%@ allowOutgoing=%@ duration=%.3f scroll=%ld table=%ld collection=%ld messageCells=%ld visibleCells=%lu extracted=%ld queued=%ld cacheHits=%ld renderedCached=%ld repairedTranslated=%ld skippedNoText=%ld skippedOutgoing=%ld skippedTranslated=%ld skippedTranslating=%ld skippedFailed=%ld skippedInFlight=%ld skippedInvisible=%ld cellReset=%ld extractorSkipReasons={%@}",
                        chat?:@"unknown",selfChat?@"YES":@"NO",allowOutgoing?@"YES":@"NO",duration,
                        (long)[stats[@"scrollViews"] integerValue],(long)[stats[@"tableViews"] integerValue],(long)[stats[@"collectionViews"] integerValue],(long)[stats[@"messageCells"] integerValue],(unsigned long)cells.count,
-                       (long)extracted,(long)queued,(long)cached,(long)renderedCached,(long)skippedNoText,(long)skippedOutgoing,(long)skippedAlreadyTranslated,(long)skippedTranslating,(long)skippedSame,(long)skippedInFlight,(long)skippedInvisible,(long)cellReset,[self reasonSummary:skipReasons]];
+                       (long)extracted,(long)queued,(long)cached,(long)renderedCached,(long)repairedTranslated,(long)skippedNoText,(long)skippedOutgoing,(long)skippedAlreadyTranslated,(long)skippedTranslating,(long)skippedSame,(long)skippedInFlight,(long)skippedInvisible,(long)cellReset,[self reasonSummary:skipReasons]];
     TPDebugLogger.shared.scanSummary=summary;
     [TPDebugLogger.shared log:summary];
     [TPTranslationRenderer refreshVisibleSpacingInRoot:root];

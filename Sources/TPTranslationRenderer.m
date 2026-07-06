@@ -604,6 +604,29 @@ static const NSInteger TPTranslationLabelTag=0x7A71001;
     [self renderCellFallbackForMessage:message line:line failed:failed];
 }
 
++(BOOL)maintainTranslationForMessage:(TPExtractedMessage*)message{
+    if(!message.cell||[self stateForCell:message.cell]!=TPBubbleStateTranslated)return NO;
+    NSString *translation=objc_getAssociatedObject(message.cell,TPTranslationTextKey);
+    if(!translation.length)return NO;
+    UILabel *fallback=objc_getAssociatedObject(message.cell,TPFallbackLabelKey);
+    UIView *currentContainer=[self bubbleContainerForMessage:message];
+    BOOL staleContainer=(fallback&&currentContainer&&fallback.superview&&fallback.superview!=currentContainer);
+    BOOL missingFallback=(!fallback||!fallback.superview||fallback.hidden||fallback.alpha<0.05||!fallback.text.length||(message.cell.window&&fallback.window!=message.cell.window)||staleContainer);
+    if(missingFallback){
+        [TPDebugLogger.shared log:[NSString stringWithFormat:@"render repair key=%@ reason=fallback-missing cell=%@ label=%@ superview=%@ currentContainer=%@ staleContainer=%@",
+                                   message.messageId?:@"nil",NSStringFromClass(message.cell.class),fallback?@"YES":@"NO",fallback.superview?NSStringFromClass(fallback.superview.class):@"none",currentContainer?NSStringFromClass(currentContainer.class):@"none",staleContainer?@"YES":@"NO"]];
+        [self removeFallbackFromCell:message.cell];
+        objc_setAssociatedObject(message.cell,TPStateKey,@(TPBubbleStateUnprocessed),OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(message.cell,TPTranslationTextKey,nil,OBJC_ASSOCIATION_COPY_NONATOMIC);
+        [self setTranslation:translation forMessage:message];
+        return YES;
+    }
+    [fallback.superview bringSubviewToFront:fallback];
+    [self updateReservedHeightForMessage:message label:fallback];
+    [self refreshVisibleSpacingNearCell:message.cell];
+    return NO;
+}
+
 +(void)setTranslatingForMessage:(TPExtractedMessage*)message{
     [self setState:TPBubbleStateTranslating message:message text:@""];
 }

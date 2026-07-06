@@ -8,4 +8,5 @@ typedef NS_ENUM(NSInteger,TPBubbleState){TPBubbleStateUnprocessed,TPBubbleStateT
 +(void)setFailure:(NSError*)error forMessage:(TPExtractedMessage*)message retry:(dispatch_block_t)retry;
 +(void)resetCell:(UIView*)cell;
 +(void)refreshVisibleSpacingInRoot:(UIView*)root;
++(BOOL)maintainTranslationForMessage:(TPExtractedMessage*)message;
 @end
