@@ -152,10 +152,10 @@ static const void *TPMessageIdentityKey=&TPMessageIdentityKey;
         [self translate:message chat:chat requestKey:requestKey];
     }
     NSTimeInterval duration=-[started timeIntervalSinceNow];
-    NSString *summary=[NSString stringWithFormat:@"scan end chat=%@ selfChat=%@ allowOutgoing=%@ duration=%.3f scroll=%ld table=%ld collection=%ld messageCells=%ld visibleCells=%lu extracted=%ld queued=%ld cacheHits=%ld renderedCached=%ld skippedNoText=%ld skippedOutgoing=%ld skippedTranslated=%ld skippedTranslating=%ld skippedInFlight=%ld skippedInvisible=%ld cellReset=%ld extractorSkipReasons={%@}",
+    NSString *summary=[NSString stringWithFormat:@"scan end chat=%@ selfChat=%@ allowOutgoing=%@ duration=%.3f scroll=%ld table=%ld collection=%ld messageCells=%ld visibleCells=%lu extracted=%ld queued=%ld cacheHits=%ld renderedCached=%ld skippedNoText=%ld skippedOutgoing=%ld skippedTranslated=%ld skippedTranslating=%ld skippedFailed=%ld skippedInFlight=%ld skippedInvisible=%ld cellReset=%ld extractorSkipReasons={%@}",
                        chat?:@"unknown",selfChat?@"YES":@"NO",allowOutgoing?@"YES":@"NO",duration,
                        (long)[stats[@"scrollViews"] integerValue],(long)[stats[@"tableViews"] integerValue],(long)[stats[@"collectionViews"] integerValue],(long)[stats[@"messageCells"] integerValue],(unsigned long)cells.count,
-                       (long)extracted,(long)queued,(long)cached,(long)renderedCached,(long)skippedNoText,(long)skippedOutgoing,(long)skippedAlreadyTranslated,(long)skippedTranslating,(long)skippedInFlight,(long)skippedInvisible,(long)cellReset,[self reasonSummary:skipReasons]];
+                       (long)extracted,(long)queued,(long)cached,(long)renderedCached,(long)skippedNoText,(long)skippedOutgoing,(long)skippedAlreadyTranslated,(long)skippedTranslating,(long)skippedSame,(long)skippedInFlight,(long)skippedInvisible,(long)cellReset,[self reasonSummary:skipReasons]];
     TPDebugLogger.shared.scanSummary=summary;
     [TPDebugLogger.shared log:summary];
 }
