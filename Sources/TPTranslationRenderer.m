@@ -4,7 +4,7 @@
 #import "TPDebugLogger.h"
 #import <objc/runtime.h>
 
-static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceViewKey=&TPSourceViewKey,*TPFallbackLabelKey=&TPFallbackLabelKey,*TPOriginalTextKey=&TPOriginalTextKey,*TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey,*TPOriginalLinesKey=&TPOriginalLinesKey,*TPOriginalEditableKey=&TPOriginalEditableKey,*TPOriginalSelectableKey=&TPOriginalSelectableKey;
+static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceViewKey=&TPSourceViewKey,*TPFallbackLabelKey=&TPFallbackLabelKey,*TPAdjustedFramesKey=&TPAdjustedFramesKey,*TPOriginalTextKey=&TPOriginalTextKey,*TPOriginalAttributedTextKey=&TPOriginalAttributedTextKey,*TPOriginalLinesKey=&TPOriginalLinesKey,*TPOriginalEditableKey=&TPOriginalEditableKey,*TPOriginalSelectableKey=&TPOriginalSelectableKey;
 
 @implementation TPTranslationRenderer
 
@@ -148,10 +148,24 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   NSString *plain=[NSString stringWithFormat:@"%@\n%@",objc_getAssociatedObject(source,TPOriginalTextKey)?:[self textFromSource:source]?:@"",line];
   return [self setStyledText:styled plain:plain source:source failed:failed usedKey:usedKey];
 }
-+ (UILabel *)fallbackLabelForMessage:(TPExtractedMessage *)message failed:(BOOL)failed {
++ (UIView *)findInView:(UIView *)view classNameContains:(NSString *)needle {
+  if(!view||!needle.length)return nil;
+  if([NSStringFromClass(view.class) containsString:needle])return view;
+  for(UIView *sub in view.subviews){UIView *found=[self findInView:sub classNameContains:needle];if(found)return found;}
+  return nil;
+}
++ (UIView *)messageContainerForMessage:(TPExtractedMessage *)message {
+  for(UIView *v=message.sourceView;v;v=v.superview)if([NSStringFromClass(v.class) containsString:@"WAMessageContainerView"])return v;
+  return [self findInView:message.cell classNameContains:@"WAMessageContainerView"];
+}
++ (void)rememberFrameForView:(UIView *)view cell:(UIView *)cell frames:(NSMutableArray *)frames {
+  if(!view)return;
+  [frames addObject:@{@"view":[NSValue valueWithNonretainedObject:view],@"frame":[NSValue valueWithCGRect:view.frame]}];
+}
++ (UILabel *)fallbackLabelForMessage:(TPExtractedMessage *)message failed:(BOOL)failed text:(NSString *)text {
   UILabel *label=objc_getAssociatedObject(message.cell,TPFallbackLabelKey);
   UIView *source=message.sourceView?:message.cell;
-  UIView *container=source.superview?:message.cell;
+  UIView *container=[self messageContainerForMessage:message]?:source.superview?:message.cell;
   if(!label){
     label=[UILabel new];
     label.accessibilityIdentifier=@"tp.translation";
@@ -162,11 +176,30 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   }
   label.textColor=[self translationColorFailed:failed];
   label.font=[self fontFromSource:source failed:failed];
+  label.text=text?:@"";
   label.userInteractionEnabled=failed;
-  CGRect r=[source convertRect:source.bounds toView:container];
-  CGFloat width=MAX(80,MIN(CGRectGetWidth(r),CGRectGetWidth(container.bounds)-CGRectGetMinX(r)-8));
+  UIView *textSlice=[self findInView:container classNameContains:@"WAMessageAttributedTextSliceView"];
+  UIView *status=[self findInView:container classNameContains:@"WAMessageStatusSliceView"];
+  UIView *bubble=[self findInView:container classNameContains:@"WDSBubbleView"]?:container;
+  CGRect r=textSlice?[textSlice convertRect:textSlice.bounds toView:container]:[source convertRect:source.bounds toView:container];
+  CGFloat width=MAX(80,MIN(CGRectGetWidth(r)-20,CGRectGetWidth(container.bounds)-CGRectGetMinX(r)-18));
   CGSize fit=[label sizeThatFits:CGSizeMake(width,CGFLOAT_MAX)];
-  label.frame=CGRectIntegral(CGRectMake(CGRectGetMinX(r),CGRectGetMaxY(r)+2,width,MIN(42,MAX(18,fit.height))));
+  CGFloat height=MIN(44,MAX(17,fit.height));
+  CGFloat extra=height+5;
+  if(!objc_getAssociatedObject(message.cell,TPAdjustedFramesKey)){
+    NSMutableArray *frames=[NSMutableArray array];
+    [self rememberFrameForView:message.cell cell:message.cell frames:frames];
+    if([message.cell respondsToSelector:@selector(contentView)])[self rememberFrameForView:((UITableViewCell*)message.cell).contentView cell:message.cell frames:frames];
+    [self rememberFrameForView:container cell:message.cell frames:frames];
+    [self rememberFrameForView:bubble cell:message.cell frames:frames];
+    [self rememberFrameForView:status cell:message.cell frames:frames];
+    objc_setAssociatedObject(message.cell,TPAdjustedFramesKey,frames,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    for(UIView *v in @[message.cell,container,bubble]){
+      CGRect f=v.frame; f.size.height+=extra; v.frame=f; v.clipsToBounds=NO;
+    }
+    if(status){CGRect sf=status.frame; sf.origin.y+=extra; status.frame=sf;}
+  }
+  label.frame=CGRectIntegral(CGRectMake(CGRectGetMinX(r)+10,CGRectGetMaxY(r)+2,width,height));
   [container bringSubviewToFront:label];
   return label;
 }
@@ -191,8 +224,7 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   }
   TPDebugLogger.shared.lastError=[NSString stringWithFormat:@"未找到可写消息文本宿主: %@",NSStringFromClass(message.sourceView.class)];
   [TPDebugLogger.shared log:[@"host candidates " stringByAppendingString:[self debugViewSummaryForCell:message.cell message:message.text]?:@"none"]];
-  UILabel *label=[self fallbackLabelForMessage:message failed:failed];
-  label.text=line;
+  [self fallbackLabelForMessage:message failed:failed text:line];
   [self refreshLayoutAroundCell:message.cell];
 }
 
@@ -211,6 +243,9 @@ static const void *TPStateKey=&TPStateKey,*TPMessageKey=&TPMessageKey,*TPSourceV
   UILabel *fallback=objc_getAssociatedObject(cell,TPFallbackLabelKey);
   [fallback removeFromSuperview];
   objc_setAssociatedObject(cell,TPFallbackLabelKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  NSArray *frames=objc_getAssociatedObject(cell,TPAdjustedFramesKey);
+  for(NSDictionary *entry in frames){UIView *v=[entry[@"view"] nonretainedObjectValue];NSValue *frame=entry[@"frame"];if(v&&frame)v.frame=frame.CGRectValue;}
+  objc_setAssociatedObject(cell,TPAdjustedFramesKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   if(source){
     NSAttributedString *attr=objc_getAssociatedObject(source,TPOriginalAttributedTextKey);
     NSString *text=objc_getAssociatedObject(source,TPOriginalTextKey);
